@@ -8,6 +8,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.http.MediaType;
@@ -32,6 +33,7 @@ import com.auth0.jwt.JWTVerifier;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.auth0.jwt.interfaces.DecodedJWT;
 import com.facebookMessenger.FacebookMessnger.domain.Roles;
+import com.facebookMessenger.FacebookMessnger.domain.Status;
 import com.facebookMessenger.FacebookMessnger.domain.User;
 import com.facebookMessenger.FacebookMessnger.repository.UserRepository;
 import com.facebookMessenger.FacebookMessnger.service.UserService;
@@ -51,44 +53,34 @@ public class UserController {
 	private long expirationTime = 1800000;
 	private final UserRepository repo;
 	private final UserService service;
-	
-	@GetMapping("/userDetails/{user}")
-	public User getUserDetails(@PathVariable String user) {
-		return service.getUser(user);
-	}
+
 	
 	@PostMapping("/save")
 	public User saveUser(@RequestBody User user) {
 		return service.saveUser(user);
 	}
 	
-	@DeleteMapping("delete/{email}")
-	public void delete( @PathVariable("email") String email) {
-		log.info("Delete user {}", email);
-		User user = service.getUser(email);
-		service.removeRole(email);
-		service.delete(user);
+	@DeleteMapping("delete/{user}")
+	public void delete( @PathVariable("user") String user) {
+		log.info("Delete user {}", user);
+		User thisUser = service.getUser(user);
+		service.removeRole(user);
+		service.delete(thisUser);
 	}
 	
-	@GetMapping("forgot/{email}")
-	public User forgotPassword( @PathVariable("email") String email) {
-		log.info("User {} forgot password", email);
-		User user = service.getUser(email);
+	@GetMapping("forgot/{user}")
+	public User forgotPassword( @PathVariable("user") String user) {
+		log.info("User {} forgot password", user);
+		User thisUser = service.getUser(user);
 		if (user == null) return null;
-		return user;	
+		return thisUser;	
 	}
 	
-	
-    @PostMapping("/pendingRole")
-    public void pendingRole(@RequestParam String pendingRole, @RequestParam String user) {
-    	 System.out.println(pendingRole);
-      	 service.pending(user, pendingRole );
-    }
     
     @PutMapping("/updatePassword")
-    public User updatePassword( @RequestParam String email, @RequestParam String password) {
-    	User user = repo.findByemail(email);
-    	return service.updatePassword(password, user);
+    public User updatePassword( @RequestParam String user, @RequestParam String password) {
+    	User thisUser = service.getUser(user);
+    	return service.updatePassword(password, thisUser);
     }
     
 	@GetMapping("/allUsers")
@@ -96,12 +88,15 @@ public class UserController {
 		return service.allUsers();
 	}
 	
-	@PostMapping("/addFriend/{thisUser}/{userToAdd}")
+	@PutMapping("/addFriend/{thisUser}/{userToAdd}")
 	public void addFriend(@PathVariable("thisUser") String user, 
 						  @PathVariable("userToAdd") String userToAdd) {
-		service.addFriend(user, userToAdd);
+		 service.addFriend(user, userToAdd);
 	}
-	
+	@GetMapping("/currentUser/{user}")
+	public User getUser(@PathVariable ("user") String user) {
+		return service.getUser(user);
+	}
 	
 	@PostMapping("/role/addtouser")
 	public ResponseEntity<?>addRoleToUser(@RequestBody RoleToUserForm form) {
@@ -120,11 +115,15 @@ public class UserController {
 	                DecodedJWT decodedJWT = verifier.verify(refresh_token);
 	                String username = decodedJWT.getSubject();
 	                User user = service.getUser(username);
+	                if(user.getStatus() == Status.OFFLINE) {
+	                	user.setStatus(Status.ONLINE);
+	                	repo.save(user);
+	                }
 	                String access_token = JWT.create()
 	                        .withSubject(user.getEmail())
 	                        .withExpiresAt(new Date(System.currentTimeMillis() + expirationTime))
 	                        .withIssuer(request.getRequestURL().toString())
-	                        .withClaim("roles", user.getRoles().stream().map(Roles::getName).collect(Collectors.toList()))
+	                        .withClaim("roles", user.getRole().stream().map(Roles::getName).collect(Collectors.toList()))
 
 	                        .sign(algorithm);
 	                Map<String, String> tokens = new HashMap<>();	               
@@ -160,11 +159,17 @@ public class UserController {
 	 	service.disconnect(user);
 	 	return user;
 	 }
-	 @GetMapping("/users")
-	 public ResponseEntity<List<User>> findConnectedUsers(){
-	 return ResponseEntity.ok(service.findConnectedUser());
+	 @GetMapping("/usersOnline/{currentUser}")
+	 public List<User> findConnectedUsers(@PathVariable("currentUser") String user){
+		 
+	 return service.findConnectedUser(service.getUser(user));
 	 }
-	 
+	 @GetMapping("/myFriends/{user}")
+	 public List<String>  findMyFriends(@PathVariable("user") String user){
+		 
+		 
+	 return service.myFriends(user);
+	 } 
 	 
 	 
 	 

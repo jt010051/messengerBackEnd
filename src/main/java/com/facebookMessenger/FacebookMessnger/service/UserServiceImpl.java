@@ -1,18 +1,35 @@
 package com.facebookMessenger.FacebookMessnger.service;
 
 
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-//import org.springframework.security.core.authority.SimpleGrantedAuthority;
-//import org.springframework.security.core.userdetails.UserDetails;
-//import org.springframework.security.core.userdetails.UserDetailsService;
-//import org.springframework.security.core.userdetails.UsernameNotFoundException;
-//import org.springframework.security.crypto.password.PasswordEncoder;
+
+import org.springframework.context.annotation.Bean;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.authentication.AuthenticationManager;
+import org.springframework.security.authentication.AuthenticationProvider;
+import org.springframework.security.authentication.ProviderManager;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
+import org.springframework.security.config.annotation.authentication.configuration.AuthenticationConfiguration;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+import org.springframework.security.core.userdetails.UserDetailsService;
+import org.springframework.security.core.userdetails.UsernameNotFoundException;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+
+import com.facebookMessenger.FacebookMessnger.domain.ChatRoom;
 import com.facebookMessenger.FacebookMessnger.domain.Roles;
 import com.facebookMessenger.FacebookMessnger.domain.Status;
 import com.facebookMessenger.FacebookMessnger.domain.User;
+import com.facebookMessenger.FacebookMessnger.repository.ChatRoomRepository;
 import com.facebookMessenger.FacebookMessnger.repository.RoleRepository;
 import com.facebookMessenger.FacebookMessnger.repository.UserRepository;
 import jakarta.transaction.Transactional;
@@ -20,53 +37,61 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 @Service @RequiredArgsConstructor @Transactional @Slf4j
 
-//, UserDetailsService
-public class UserServiceImpl implements UserService {
+
+public class UserServiceImpl implements UserService, UserDetailsService {
 	private final UserRepository repo;
 	private final RoleRepository roleRepo;
-	ChatRoomService chatService;
-	//private final PasswordEncoder passwordEncoder;
-	//public UserDetails loadUserByUsername(String user) throws UsernameNotFoundException {
-	//	User thisUser = null;
-	//	String phoneCheck = "^(1\\-)?[0-9]{3}\\-?[0-9]{3}\\-?[0-9]{4}$";
-	//
-	//	
-	//    Pattern pattern = Pattern.compile(phoneCheck);
-	// 
-	//    Matcher matcher = pattern.matcher(user);
-	//
-	//    if(matcher.matches()) {
-	// 
-	//    
-	//thisUser = repo.findByphone(user);
-	//    }
-	//	
-	//	
-	//    else thisUser = repo.findByemail(user);
-	//	
-	//	
-	//    if(thisUser == null) {
-	//        log.error("Email or Phone Number not found in the database");
-	//        throw new UsernameNotFoundException("Email or Phone Number not found in the database");
-	//    } else {
-	//        thisUser.setStatus(Status.ONLINE);
-	//
-	//        log.info("Email or Phone Number found in the database: {}", user);
-	//        Collection<SimpleGrantedAuthority> authorities = new ArrayList<>();
-	//      
-	//        thisUser.getRoles().forEach(role -> {
-	//            authorities.add(new SimpleGrantedAuthority(role.getName()));
-	//        });
-	//        
-	//
-	//    
-	//        return new org.springframework.security.core.userdetails.User(thisUser.getEmail(), thisUser.getPassword(), authorities);
-	//    }
-	//
-	//}
+	private final ChatRoomService chatService;
+	private final PasswordEncoder passwordEncoder;
+	private final ChatRoomRepository chatRepo;
+
+ 
+
+
+	
+	
+	public UserDetails loadUserByUsername(String user) throws UsernameNotFoundException {
+		User thisUser = null;
+		String phoneCheck = "^(1\\-)?[0-9]{3}\\-?[0-9]{3}\\-?[0-9]{4}$";
+	
+		
+	    Pattern pattern = Pattern.compile(phoneCheck);
+	 
+	    Matcher matcher = pattern.matcher(user);
+	
+	    if(matcher.matches()) {
+	 
+	    
+	thisUser = repo.findByphone(user);
+	    }
+		
+		
+	    else thisUser = repo.findByemail(user);
+	 
+		
+	    if(thisUser == null) {
+	        log.error("Email or Phone Number not found in the database");
+	        throw new UsernameNotFoundException("Email or Phone Number not found in the database");
+	    } else {
+	    	
+	        thisUser.setStatus(Status.ONLINE);
+	        repo.save(thisUser);
+	        log.info("Email or Phone Number found in the database: {}", user);
+	        Collection<SimpleGrantedAuthority> authorities = new ArrayList<>();
+	      
+	        thisUser.getRole().forEach(role -> {
+	            authorities.add(new SimpleGrantedAuthority(role.getName()));
+	        });
+	        
+	
+	    
+	        return new org.springframework.security.core.userdetails.User(thisUser.getEmail(), thisUser.getPassword(), authorities);
+	    }
+	
+	}
 	
 	@Override
-	public User saveUser(User user) {
+	public User saveUser(User user) throws UsernameNotFoundException {
 	
 //		  List<User> list = repo.findAll();
 		  String thisUser = (user.getEmail() != "" ? user.getEmail() : user.getPhone());	    	
@@ -82,7 +107,8 @@ public class UserServiceImpl implements UserService {
 		  else if(user.getEmail().equals("")) user.setEmail("tempEmail");
 		  
 		  log.info("Saving  {} to the database", thisUser);
-//		        user.setPassword(passwordEncoder.encode(user.getPassword()));
+		        user.setPassword(passwordEncoder.encode(user.getPassword()));
+
 		 return repo.save(user);		    			
 	}
 
@@ -92,11 +118,14 @@ public class UserServiceImpl implements UserService {
 	}
 
 	@Override
-	public User getUser(String user) {
+	public User getUser(String user) throws UsernameNotFoundException {
 		log.info(user);
 		
 		if(repo.findByphone(user) != null) return repo.findByphone(user);
-		
+		  if(repo.findByemail(user) == null) {
+		        log.error("Email or Phone Number not found in the database");
+		        throw new UsernameNotFoundException("Email or Phone Number not found in the database");
+		    }
 		return repo.findByemail(user);
 	}
 	
@@ -106,8 +135,7 @@ public class UserServiceImpl implements UserService {
 	
 	@Override
 	public Roles saveRole(Roles role) {
-	       log.info("Saving new role {} to the database", role.getName());
-	        
+	       log.info("Saving new role {} to the database", role.getName());        
 	       return roleRepo.save(role);
 	}
 	
@@ -115,34 +143,29 @@ public class UserServiceImpl implements UserService {
 	
 	
 	@Override
-	public void addRoleToUser(String email, String roleName) {
-		String phoneCheck = "^(1\\-)?[0-9]{3}\\-?[0-9]{3}\\-?[0-9]{4}$";
-	    Pattern pattern = Pattern.compile(phoneCheck); 
-	    Matcher matcher = pattern.matcher(email);
-	    User user = null;
+	public void addRoleToUser(String user, String roleName) {
+	
+	    User thisUser = getUser(user);
         Roles role = roleRepo.findByName(roleName);
-        
-	    if(matcher.matches()) {	    
-	    	user = repo.findByphone(email);
-	    }		
-	    else user = repo.findByemail(email);
+        if(role == null) {
+        	log.info("role {} not found", roleName);
+        	return;
+        }
+	
 	    
-	    user.getRoles().add(role);
+        thisUser.getRole().add(role);
 	    
-		log.info("Adding role {} to  {}", roleName, email);
+		log.info("Adding role {} to  {}", roleName, thisUser);
 		log.info("userDetails {}", user);
+		thisUser.getIsPending().put(role, true);
+	
 	}
 	
 	@Override
 	public User updatePassword(String password, User updatedUser) {
-		User updatedPassword= repo.findById(updatedUser.getID()).get();
-//		if(updatedPassword.getPassword() != passwordEncoder.encode(password)) {
-//			updatedPassword.setPassword(passwordEncoder.encode(password));
-//
-//		}
-//		else return null;
-		
-		return repo.save(updatedPassword);
+
+		updatedUser.setPassword(passwordEncoder.encode(password));
+		return repo.save(updatedUser);
 	}
 	
 	@Override
@@ -166,33 +189,14 @@ public class UserServiceImpl implements UserService {
 	
 	@Override
 	public void removeRole(String username) {
-		User user = repo.findByemail(username);
-		user.setRoles(null);		
+		User user = getUser(username);
+		user.setRole(null);		
 	}
 	
-	@Override
-	public void pending(String user, String pendingRole) {
-		User thisUser = null;
-		String phoneCheck = "^(1\\-)?[0-9]{3}\\-?[0-9]{3}\\-?[0-9]{4}$";		
-	    Pattern pattern = Pattern.compile(phoneCheck);	 
-	    Matcher matcher = pattern.matcher(user);
-	    
-	    if(matcher.matches()) thisUser = repo.findByphone(user);
-	    else thisUser = repo.findByemail(user);
-	    
-		System.out.println(pendingRole);
-		  	    	
-		if(pendingRole.equals("admin")) thisUser.setPending(true);
-		else {
-		  	 if(!thisUser.getEmail().equals("tempEmail"))
-		  	    addRoleToUser(thisUser.getEmail(), "ROLE_USER");
-		  	 else addRoleToUser(thisUser.getPhone(), "ROLE_USER");
-		}			
-	}
+
 
 	public void disconnect(User user) {
-		var storedUser = repo.findByemail(user.getEmail());
-				
+		var storedUser = repo.findByemail(user.getEmail());				
 		if(storedUser == null)storedUser = repo.findByphone(user.getEmail());
 		else if(storedUser != null) {
 			storedUser.setStatus(Status.OFFLINE);
@@ -200,29 +204,37 @@ public class UserServiceImpl implements UserService {
 		}
 	}
 	
-	public List<User> findConnectedUser(){
-		return repo.findAllByStatus(Status.ONLINE);
+	public List<User> findConnectedUser(User user){
+		List<User> online = repo.findAllByStatusAndEmailIn(Status.ONLINE, user.getFriends());
+		return online;
 	}
 
 	@Override
 	public void addFriend(String thisUser, String userToAdd) {
-//		User user = getUser(thisUser);
-//		User otherUser = getUser(userToAdd);
-//
-//		List<User> listOfFriends = user.getFriends();
-//		List<User> otherFriends = user.getFriends();
-//
-//		listOfFriends.add(otherUser);
-//		otherFriends.add(user);
-//		user.setFriends(listOfFriends);
-//		otherUser.setFriends(otherFriends);
-//		
-//		repo.save(user);
-//		repo.save(otherUser);
-//
-//		chatService.getChatRoomId(user.getFirstName(), otherUser.getFirstName(), false);
-//		// TODO Auto-generated method stub
+		User user = getUser(thisUser);
+		if(user.getFriends().contains(userToAdd)) {
+			log.info("Users are already friends");
+			return;
+		}
 		
+		User otherUser = getUser(userToAdd);
+		List<String> myFriends = user.getFriends();
+		List<String> theirFriends = otherUser.getFriends();
+
+		myFriends.add(userToAdd);
+		user.setFriends(myFriends);
+
+		theirFriends.add(thisUser);
+		otherUser.setFriends(theirFriends);
+
+		repo.save(user);
+		repo.save(otherUser);
+	}
+
+	@Override
+	public List<String> myFriends(String thisUser){
+		User user = getUser(thisUser);
+		return 	user.getFriends();
 	}
 	
 }
